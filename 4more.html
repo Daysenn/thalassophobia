@@ -1,0 +1,351 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  
+</head>
+
+<!------------- BODY --------------------------->
+
+<body>
+
+    <!-- SCENA -->
+
+    <a-scene fog="type: exponential; color: #000814; density: 0.002">
+
+  <a-assets>
+    <a-asset-item id="duck" src="https://cdn.aframe.io/examples/ar/models/duck/Duck.glb"></a-asset-item>
+  </a-assets>
+
+      <!-- SKY s obrázkem + rotace -->
+      <a-sky
+        id="sky"
+        src="sky1.jpg"
+        rotation="0 180 0"
+        animation="property: rotation; to: 0 540 0; dur: 1200000; loop: true; easing: linear"
+      ></a-sky>
+
+      <!-- světla -->
+      <a-light type="ambient" intensity="0.6"></a-light>
+
+      <!-- hráč -->
+      <a-entity id="rig" position="0 5 0" movement>
+        <a-camera look-controls wasd-controls="enabled: false"></a-camera>
+      </a-entity>
+
+      <!-- rybina -->
+      <a-entity id="fishContainer"></a-entity>
+
+        <a-box src="#boxTexture" position="0 2 -5" rotation="0 45 45" scale="2 2 2"
+            animation="property: object3D.position.y; to: 2.2; dir: alternate; dur: 2000; loop: true"></a-box>
+
+    </a-scene>
+
+    <!------------- SKRIPTÍK --------------------------->
+
+    <script>
+
+    const sceneEl = document.querySelector("a-scene");
+    const scene = sceneEl.object3D;
+
+    const CHUNK_SIZE = 200;
+    const RENDER_DISTANCE = 2;
+
+    const chunks = {};
+
+    const fishes = [];
+    const MAX_FISH = 300;
+
+//------------------------------------------------------------------------------
+// PLAYER MOVEMENT
+
+    AFRAME.registerComponent("movement", {
+
+      init: function () {
+
+        this.keys = {};
+        this.speed = 20;
+
+        window.addEventListener("keydown", (e) => {
+          this.keys[e.code] = true;
+        });
+
+        window.addEventListener("keyup", (e) => {
+          this.keys[e.code] = false;
+        });
+      },
+
+      tick: function (t, dt) {
+
+        const dt_s = dt / 1000;
+        const rig = this.el.object3D;
+        const cam = this.el.querySelector("a-camera");
+
+        const speed = this.speed * dt_s;
+
+        maybeSpawnFish( rig.position.x, rig.position.y, rig.position.z, t);
+        cleanupFish(rig.position.x, rig.position.z);
+
+        // směr pohledu
+        const dir = new THREE.Vector3();
+        cam.object3D.getWorldDirection(dir);
+        dir.y = 0;
+        dir.normalize();
+
+        const right = new THREE.Vector3()
+          .crossVectors(dir, new THREE.Vector3(0,1,0))
+          .normalize();
+
+        // WASD
+        if (this.keys["KeyW"]) rig.position.addScaledVector(dir, -speed);
+        if (this.keys["KeyS"]) rig.position.addScaledVector(dir, speed);
+        if (this.keys["KeyA"]) rig.position.addScaledVector(right, -speed);
+        if (this.keys["KeyD"]) rig.position.addScaledVector(right, speed);
+
+        if (this.keys["Space"]) rig.position.y += speed;   // nahoru
+        if (this.keys["ShiftLeft"]) rig.position.y -= speed; // dolů
+
+        // NEBE sleduje hráče
+        const sky = document.querySelector("#sky");
+        sky.object3D.position.copy(rig.position);
+
+        // FOG podle výšky
+        if (rig.position.y < 0) {
+          scene.fog.density = 0.005;
+          scene.fog.color.set(0x00111f);
+        } else {
+          scene.fog.density = 0.002;
+          scene.fog.color.set(0x000814);
+        }
+
+        updateChunks(rig.position.x, rig.position.z);
+      }
+    });
+
+//------------------------------------------------------------------------------
+// CHUNKY MOŘE - PROCEDUÁLNÍ SVĚT
+
+    function generateChunk(x, z) {
+
+      const key = x + "," + z;
+      if (chunks[key]) return;
+
+      const group = new THREE.Group();
+
+      // MOŘE
+      const sea = new THREE.Mesh(
+        new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE),
+        new THREE.MeshPhongMaterial({
+          color: 0x1a4d7a,
+          transparent: true,
+          opacity: 0.7,
+          side: THREE.DoubleSide
+        })
+      );
+
+      sea.rotation.x = -Math.PI / 2;
+      sea.position.y = 0;
+
+      group.add(sea);
+
+      // DNO
+      const texture = new THREE.TextureLoader().load("floor.jpg");
+
+      // aby se opakovala
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+
+      // kolikrát se opakuje (X, Z)
+      texture.repeat.set(10, 10);
+
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE),
+        new THREE.MeshLambertMaterial({
+          map: texture,
+          side: THREE.DoubleSide
+        })
+      );
+
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = -200;
+
+      group.add(floor);
+
+      group.position.set(
+        x * CHUNK_SIZE,
+        0,
+        z * CHUNK_SIZE
+      );
+
+      scene.add(group);
+      chunks[key] = group;
+    }
+
+    function updateChunks(px, pz) {
+
+      const cx = Math.floor(px / CHUNK_SIZE);
+      const cz = Math.floor(pz / CHUNK_SIZE);
+
+      for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
+        for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
+          generateChunk(cx + x, cz + z);
+        }
+      }
+    }
+
+    // ----- RYBINY -------------------------------------------------
+
+    function spawnFish(x, y, z) {
+
+        if (fishes.length >= MAX_FISH) return;
+
+        const fish = document.createElement("a-sphere");
+
+        fish.setAttribute("radius", "0.3");
+        fish.setAttribute("color", "#44aaff");
+
+        fish.setAttribute("position", `${x} ${y} ${z}`);
+
+        document.querySelector("#fishContainer").appendChild(fish);
+
+        fishes.push({
+            el: fish,
+            vx: (Math.random() - 0.5) * 0.05,
+            vy: (Math.random() - 0.5) * 0.03,
+            vz: (Math.random() - 0.5) * 0.05
+        });
+    }
+
+
+    // SPAWN podle chunků kolem hráče (NEKONEČNO WORLD STYLE)
+    function spawnFishAroundPlayer(px, py, pz) {
+
+        const cx = Math.floor(px / CHUNK_SIZE);
+        const cz = Math.floor(pz / CHUNK_SIZE);
+
+        const spawnPerChunk = 3; // kolik ryb na chunk cyklus
+
+        for (let x = -RENDER_DISTANCE - 1; x <= RENDER_DISTANCE + 1; x++) {
+            for (let z = -RENDER_DISTANCE - 1; z <= RENDER_DISTANCE + 1; z++) {
+
+                const baseX = (cx + x) * CHUNK_SIZE;
+                const baseZ = (cz + z) * CHUNK_SIZE;
+
+                for (let i = 0; i < spawnPerChunk; i++) {
+
+                    const fx = baseX + (Math.random() - 0.5) * CHUNK_SIZE;
+                    const fz = baseZ + (Math.random() - 0.5) * CHUNK_SIZE;
+
+                    // hloubka + randomness
+                    let fy = py + (Math.random() - 0.5) * 25;
+
+                    // nikdy nad hladinu
+                    fy = Math.min(fy, -1);
+
+                    spawnFish(fx, fy, fz);
+                }
+            }
+        }
+    }
+
+
+    // time-based spawn (stabilní, ne laggy burst)
+    let lastSpawn = 0;
+
+    function maybeSpawnFish(px, py, pz, time) {
+
+      const cx = Math.floor(px / CHUNK_SIZE);
+      const cz = Math.floor(pz / CHUNK_SIZE);
+
+      for (let x = -1; x <= 1; x++) {
+        for (let z = -1; z <= 1; z++) {
+
+          const baseX = (cx + x) * CHUNK_SIZE;
+          const baseZ = (cz + z) * CHUNK_SIZE;
+
+          spawnFishAroundPlayer(baseX + CHUNK_SIZE/2, py, baseZ + CHUNK_SIZE/2);
+        }
+      }
+    }
+
+
+    // cleanup pořád podle vzdálenosti hráče (OK)
+    function cleanupFish(px, pz) {
+
+        for (let i = fishes.length - 1; i >= 0; i--) {
+
+            const fish = fishes[i];
+            const pos = fish.el.object3D.position;
+
+            const dx = pos.x - px;
+            const dz = pos.z - pz;
+
+            const dist = Math.sqrt(dx * dx + dz * dz);
+
+            if (dist > 120) {
+
+                fish.el.remove();
+                fishes.splice(i, 1);
+            }
+        }
+    }
+
+    function animateFish() {
+
+      for (const fish of fishes) {
+
+        const pos = fish.el.object3D.position;
+
+        // pohyb
+        pos.x += fish.vx;
+        pos.y += fish.vy;
+        pos.z += fish.vz;
+
+        // LIMITY VÝŠKY
+
+        // hladina
+        if (pos.y > -1) {
+          fish.vy = -Math.abs(fish.vy);
+        }
+
+        // moc hluboko
+        if (pos.y < -40) {
+          fish.vy = Math.abs(fish.vy);
+        }
+
+        // náhodná změna směru
+        if (Math.random() < 0.01) {
+
+          fish.vx = (Math.random() - 0.5) * 0.05;
+          fish.vy = (Math.random() - 0.5) * 0.03;
+          fish.vz = (Math.random() - 0.5) * 0.05;
+        }
+
+        // otočení ryby
+        const angle =
+          Math.atan2(fish.vx, fish.vz) * 180 / Math.PI;
+
+        fish.el.object3D.rotation.y = angle;
+      }
+    }
+
+    function animate() {
+
+      animateFish();
+
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+    
+
+    // START AKTUALIZE CHUNKY
+    sceneEl.addEventListener("loaded", () => {
+      updateChunks(0, 0);
+    });
+
+    </script>
+
+</body>
+</html>
