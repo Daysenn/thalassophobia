@@ -45,6 +45,8 @@ const fishes = [];
 const MAX_FISH = 120;
 let lastSpawn = 0;
 
+
+////////////////////////////////////////////////////////////////////
 // ---------------- PLAYER ----------------
 
 AFRAME.registerComponent("movement", {
@@ -102,7 +104,22 @@ AFRAME.registerComponent("movement", {
   }
 });
 
-// ---------------- CHUNKS (jen svět, BEZ ryb) ----------------
+////////////////////////////////////////////////////////////////////
+// ---------------- NOISE ----------------
+
+  function terrainNoise(x, z) {
+    const macro =
+      simplex.noise2D(x * 0.002, z * 0.002) * 25;
+    const mid =
+      simplex.noise2D(x * 0.01, z * 0.01) * 6;
+    const micro =
+      simplex.noise2D(x * 0.05, z * 0.05) * 1.5;
+    return macro + mid + micro;
+  }
+
+
+//////////////////////////////////////////////////////////////////////
+// ---------------- CHUNKS
 
 function generateChunk(x, z) {
 

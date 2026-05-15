@@ -1,0 +1,265 @@
+<!doctype html>
+  <html>
+    <head>
+      <meta charset="UTF-8"/>
+      <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.js"></script>
+    </head>
+
+
+  <body>
+
+<!----------------------------------------->
+<!-- SCÉNA -------------------------------->
+
+    <a-scene fog="type: exponential; color: #000814; density: 0.002">
+
+      <!-- OBLOHA -->
+      <a-sky id="sky"
+            src="sky1.jpg"
+            rotation="0 180 0"
+            animation="property: rotation; to: 0 540 0; dur: 1200000; loop: true; easing: linear">
+      </a-sky>
+
+      <!-- SVĚTLA -->
+      <a-light type="ambient" intensity="0.5" color="#88aaff"></a-light>
+      <a-light type="directional" position="10 20 -10" intensity="1" color="#cce6ff" ></a-light>
+
+      <!-- HRÁČ A KAMERA -->
+      <a-entity id="rig" position="0 5 0" movement>
+        <a-camera look-controls wasd-controls="enabled: false"></a-camera>
+      </a-entity>
+
+      <a-cylinder position="0 0 0" radius="5" height="2" color="#FFC65D"></a-cylinder>
+
+      <a-entity id="svet"></a-entity>
+
+    </a-scene>
+
+<!----------------------------------------->
+<!-- SKRIPT ------------------------------->
+
+    <script>
+
+    ///////////////////////////////////////////////////////////////////
+    // PLAYER MOVEMENT
+    AFRAME.registerComponent("movement", {
+
+      // -----------------------------------
+      //// INIT !!! = spustí se jednou na začátku 
+      init: function () { 
+        this.keys = {}; // seznam zmáčknutých kláves
+        this.speed = 30; // rychlost pohybu
+
+        window.addEventListener("keydown", (e) => { // KDYŽ zmáčkneme klávesu
+          this.keys[e.code] = true;
+        });
+
+        window.addEventListener("keyup", (e) => {  // KDYŽ pustíme klávesu
+          this.keys[e.code] = false;
+        });
+      },
+
+      // -----------------------------------
+      //// TICK = spouští se každý frame 
+      tick: function (t, dt) { // delta time v sekundách
+        const dt_s = dt / 1000; // tělo hráče
+        const rig = this.el.object3D; // kamera hráče
+        const kamera = this.el.querySelector("a-camera"); // výsledná rychlost
+        const rychlost = this.speed * dt_s; // směr kam se kamera dívá
+        const smer = new THREE.Vector3();
+
+        kamera.object3D.getWorldDirection(smer); // nechceme lítat nahoru a dolů
+        smer.y = 0;
+        smer.normalize(); // normalizace = délka vektoru bude 1
+
+        const right = new THREE.Vector3(); // pravý směr kamery
+        right.crossVectors( smer, new THREE.Vector3(0, 1, 0) ).normalize();
+
+        updateChunks( rig.position.x, rig.position.z);
+        document.querySelector("#sky").object3D.position.copy(rig.position); // sky sleduje hráče
+
+        // -----------------------------------
+        // POHYB
+
+        if (this.keys["KeyW"]) {rig.position.addScaledVector(smer,-rychlost);}
+        if (this.keys["KeyS"]) { rig.position.addScaledVector(smer,rychlost);}
+        if (this.keys["KeyD"]) {rig.position.addScaledVector(right,-rychlost);}
+        if (this.keys["KeyA"]) {rig.position.addScaledVector(right,rychlost);}
+        if (this.keys["Space"]) {rig.position.y += rychlost;}
+        if (this.keys["ShiftLeft"]) {rig.position.y -= rychlost;}
+
+      }
+    });
+
+    //////////////////////////////////////////////////////////////////
+    // SIMPLEX NOISE
+
+     const simplex = new SimplexNoise();
+
+     function noise(x, z) {
+       const macro = simplex.noise2D(x * 0.05, z * 0.05) * 3.0; // velké kopce
+       const mid = simplex.noise2D(x * 0.15, z * 0.15) * 0.5; // střední detaily
+       const micro = simplex.noise2D(x * 0.4, z * 0.4) * 0.4; // drobné detaily
+       return macro + mid + micro; // kombo vrtsvy tak je to pak random
+     }  
+
+    ///////////////////////////////////////////////////////////////////
+    // CHUNKY
+
+    const CHUNK_SIZE = 100;
+    const RENDER_DISTANCE = 2; // jak daleko kolem hráče generujeme chunky
+    const chunky = {}; // seznam existujících chunků
+
+      function generateChunk(x, z) {
+        const key = x + "," + z; // unikátní jméno chunku
+        if (chunky[key]) return; // pokud už existuje → nic nedělej
+        const group = new THREE.Group(); // skupina pro celý chunk
+
+        // ---------------------------------------------------
+        // GEOMETRIE VODY
+
+        const geometrieVody =
+          new THREE.PlaneGeometry(
+            CHUNK_SIZE,
+            CHUNK_SIZE,
+            50,
+            50
+          );
+
+        
+        geometrieVody.rotateX(-Math.PI / 2); // otočení do vodorovna
+        const vrcholy = geometrieVody.attributes.position.array; // seznam vertexů
+
+        // deformace vertexů
+        for (let i = 0; i < vrcholy.length; i += 3) {
+          // lokální pozice vertexu
+          const xPos = vrcholy[i];
+          const zPos = vrcholy[i + 2];
+
+          // world pozice
+          const worldX = xPos + x * CHUNK_SIZE;
+          const worldZ = zPos + z * CHUNK_SIZE;
+
+          // noise výška
+          vrcholy[i + 1] = 0 + noise(worldX * 0.02, worldZ * 0.02) * 2;
+        }
+
+        geometrieVody.attributes.position.needsUpdate = true; // řekneme THREE že se vertexy změnily
+        geometrieVody.computeVertexNormals(); // přepočet světla/normál
+
+        // ---------------------------------------------------
+        // VODA
+
+        const voda = new THREE.Mesh(
+          geometrieVody,
+          new THREE.MeshPhongMaterial({
+            color: 0x1a4d7a,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide,
+            flatShading: true
+          })
+        );
+
+        //////////////////////////////////////////////////////
+        // DNO
+
+        const geometrieDna =
+          new THREE.PlaneGeometry(
+            CHUNK_SIZE,
+            CHUNK_SIZE,
+            50,
+            50
+          );
+
+        geometrieDna.rotateX(-Math.PI / 2);
+
+        const vrcholyDna =
+          geometrieDna.attributes.position.array;
+
+        for (let i = 0; i < vrcholyDna.length; i += 3) {
+
+          const xPos = vrcholyDna[i];
+          const zPos = vrcholyDna[i + 2];
+
+          const worldX =
+            xPos + x * CHUNK_SIZE;
+
+          const worldZ =
+            zPos + z * CHUNK_SIZE;
+
+          // DRUHÝ noise (jiná škála = jiný tvar)
+          const vyska = noise(worldX * 0.08, worldZ * 0.08);
+
+          // dno je dole (proto minus a velká hloubka)
+          vrcholyDna[i + 1] =
+            -200 - (vyska * 5);
+        }
+
+        geometrieDna.attributes.position.needsUpdate = true;
+        geometrieDna.computeVertexNormals();
+
+        const dno = new THREE.Mesh(
+          geometrieDna,
+          new THREE.MeshLambertMaterial({
+            color: 0x0b1a12,
+            flatShading: true
+          })
+        );
+
+        group.add(dno);
+
+        // přidání vody do chunku
+        group.add(voda);
+
+        // ---------------------------------------------------
+        // POZICE CHUNKU
+
+        group.position.set(
+
+          x * CHUNK_SIZE,
+          0,
+          z * CHUNK_SIZE
+        );
+
+        document // přidání do scény
+          .querySelector("#svet")
+          .object3D
+          .add(group);
+
+        chunky[key] = group; // uložíme chunk
+      }
+
+      // ---------------------------------------------------
+      // AKTUALIZACE CHUNKU
+
+      function updateChunks(px, pz) {
+
+        // ve kterém chunku hráč je
+        const cx = Math.floor(px / CHUNK_SIZE);
+        const cz = Math.floor(pz / CHUNK_SIZE);
+
+        // generace chunků kolem hráče
+        for (let x = -RENDER_DISTANCE;
+            x <= RENDER_DISTANCE;
+            x++) {
+
+          for (let z = -RENDER_DISTANCE;
+              z <= RENDER_DISTANCE;
+              z++) {
+
+            generateChunk(
+              cx + x,
+              cz + z
+            );
+          }
+        }
+      }
+
+
+    </script>
+
+  </body>
+
+  </html>
