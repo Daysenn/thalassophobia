@@ -217,8 +217,9 @@
         });
     }
 
-
+    // ------------------------------------------------------------
     // SPAWN podle chunků kolem hráče (NEKONEČNO WORLD STYLE)
+
     function spawnFishAroundPlayer(px, py, pz) {
 
         const cx = Math.floor(px / CHUNK_SIZE);
@@ -249,8 +250,8 @@
         }
     }
 
-
-    // time-based spawn (stabilní, ne laggy burst)
+    // -------------------------------------------
+    // time-based spawn 
     let lastSpawn = 0;
 
     function maybeSpawnFish(px, py, pz, time) {
@@ -269,7 +270,7 @@
       }
     }
 
-
+    //-------------------------------------------
     // cleanup pořád podle vzdálenosti hráče (OK)
     function cleanupFish(px, pz) {
 
@@ -291,10 +292,10 @@
         }
     }
 
+
     function animateFish() {
 
       for (const fish of fishes) {
-
         const pos = fish.el.object3D.position;
 
         // pohyb
@@ -331,15 +332,12 @@
     }
 
     function animate() {
-
       animateFish();
-
       requestAnimationFrame(animate);
     }
 
     animate();
     
-
     // START AKTUALIZE CHUNKY
     sceneEl.addEventListener("loaded", () => {
       updateChunks(0, 0);
