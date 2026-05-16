@@ -9,6 +9,12 @@
 
   <body>
 
+<!--
+git add .
+git commit -m "nazev-verze"
+git push    
+-->   
+ 
 <!----------------------------------------->
 <!-- SCÉNA -------------------------------->
 
@@ -23,14 +29,9 @@
       </a-sky>
 
       <!-- SVĚTLA -->
-      <a-light type="ambient" intensity="0.35" color="#4d6f8f"></a-light>
+      <a-light type="ambient" intensity="0.1" color="#4d6f8f"></a-light>
       <a-light type="hemisphere" color="#7076CF" groundColor="#083B2B" intensity="0.1" color="#88aaff"></a-light>
-      <a-light 
-          type="directional"
-          position="80 60 -80"
-          intensity="1.2"
-          color="#F5B63B"
-      ></a-light> 
+      <a-light type="directional" position="80 60 -80" intensity="0.7" color="#F5B63B" ></a-light> 
 
 
       <!-- HRÁČ A KAMERA -->
@@ -44,6 +45,10 @@
       <a-entity id="svet"></a-entity>
 
     </a-scene>
+
+    <audio id="music" loop>
+      <source src="music.mp3" type="audio/mpeg">
+    </audio>
 
 <!----------------------------------------->
 <!-- SKRIPT ------------------------------->
@@ -59,6 +64,7 @@
       init: function () { 
         this.keys = {}; // seznam zmáčknutých kláves
         this.speed = 30; // rychlost pohybu
+        this.idleTime = 0; // idle animace 
 
         window.addEventListener("keydown", (e) => { // KDYŽ zmáčkneme klávesu
           this.keys[e.code] = true;
@@ -94,8 +100,8 @@
         cleanupChunks(rig.position.x, rig.position.z); // čistění vzdálených chunku
 
         if (y < 0) {
-          const depth = Math.min(Math.abs(y) / 150, 1);
-          sceneEl.setAttribute( "fog", `type: exponential; color: #010814; density: ${0.0002 + depth * 0.008}`);
+          const depth = Math.min(Math.abs(y) / 300, 1);
+          sceneEl.setAttribute( "fog", `type: exponential; color: #010F0A; density: ${0.0002 + depth * 0.008}`);
         } else {
           sceneEl.setAttribute( "fog", "type: exponential; color: #FFA629; density: 0.0007" );
         }        
@@ -109,6 +115,30 @@
         if (this.keys["KeyA"]) {rig.position.addScaledVector(right,rychlost);}
         if (this.keys["Space"]) {rig.position.y += rychlost;}
         if (this.keys["ShiftLeft"]) {rig.position.y -= rychlost;}
+
+        const moving =
+          this.keys["KeyW"] ||
+          this.keys["KeyS"] ||
+          this.keys["KeyA"] ||
+          this.keys["KeyD"] ||
+          this.keys["Space"] ||
+          this.keys["ShiftLeft"];
+
+        if (!moving) {
+          this.idleTime += dt_s;
+          // jemné houpání nahoru/dolů
+          kamera.object3D.position.y =
+            Math.sin(this.idleTime * 5) * 0.08;
+          // jemný náklon
+          kamera.object3D.rotation.z =
+            Math.sin(this.idleTime * 2) * 0.01;
+
+        } else {
+          this.idleTime = 0;
+          // reset
+          kamera.object3D.position.y = 0;
+          kamera.object3D.rotation.z = 0;
+        }
 
       }
     });
@@ -285,7 +315,7 @@
         function spawnObjectsInChunk(group, chunkX, chunkZ) {
 
           const seed = hash(chunkX, chunkZ);
-          const count = Math.floor(randFromSeed(seed) * 10); // počet objektů
+          const count = Math.floor(randFromSeed(seed) * 20); // počet objektů
 
           for (let i = 0; i < count; i++) {
 
@@ -301,32 +331,42 @@
 
             let obj;
 
-            // 70% kámen
-            if (r < 0.7) {
-
-              obj = new THREE.Mesh(
-                new THREE.DodecahedronGeometry(1 + randFromSeed(s + 3) * 10),
-                new THREE.MeshLambertMaterial({ color: 0x666666 })
-              );
-
-            // 25% menší kámen / útes
-            } else if (r < 0.95) {
-
-              obj = new THREE.Mesh(
-                new THREE.BoxGeometry(10, 10, 10),
-                new THREE.MeshLambertMaterial({ color: 0x444444 })
-              );
-
-            // 5% “vrak”
-            } else {
- 
+            // 2% že se objeví tenhle objekt
+            if (r < 0.00002) {
               obj = new THREE.Mesh(
                 new THREE.CylinderGeometry(10, 5, 50, 5),
-                new THREE.MeshLambertMaterial({ color: 0x3b2f2f })
+                new THREE.MeshLambertMaterial({ color: 0x08ff10, side: THREE.DoubleSide  })
               );
+
+            // 2% že se objeví tenhle objekt
+            } else if (r < 0.0002) {
+              obj = new THREE.Mesh(
+                new THREE.BoxGeometry(50, 50, 50),
+                new THREE.MeshLambertMaterial({ color: 0xff1808, side: THREE.DoubleSide  })
+              );
+
+            } else if (r < 0.002) {
+              obj = new THREE.Mesh(
+                new THREE.TorusKnotGeometry( 10, 3, 100, 16 ),
+                new THREE.MeshLambertMaterial({ color: 0xfff700, side: THREE.DoubleSide  })
+              );
+
+            } else if (r < 0.02) {
+              obj = new THREE.Mesh(
+                new THREE.TorusGeometry( 10, 3, 16, 100 ),
+                new THREE.MeshLambertMaterial({ color: 0x000dff, side: THREE.DoubleSide  })
+              );
+
+            // zbytek bude tenhle objekt
+            } else { 
+              obj = new THREE.Mesh(
+                new THREE.DodecahedronGeometry(1 + randFromSeed(s + 30) * 10),
+                new THREE.MeshLambertMaterial({ color: 0xea08ff, side: THREE.DoubleSide })
+              ); 
+
             }
 
-            obj.position.set(x, y + 5, z);
+            obj.position.set(x, y + 10, z);
             obj.rotation.y = randFromSeed(s + 4) * Math.PI;
 
             group.add(obj);
@@ -442,7 +482,7 @@
       function spawnFishInChunk(group, chunkX, chunkZ) {
 
         const seed = hash(chunkX, chunkZ);
-        const count = 10 + Math.floor(randFromSeed(seed) * 20); 
+        const count = 30 + Math.floor(randFromSeed(seed) * 50); 
         // 10–30 ryb na chunk
 
         for (let i = 0; i < count; i++) {
@@ -509,6 +549,14 @@
       }
 
       animate();
+
+      window.addEventListener("click", () => {
+
+        const music = document.querySelector("#music");
+        music.volume = 0.4;
+        music.play();
+
+      }, { once: true });      
 
 
     </script>
