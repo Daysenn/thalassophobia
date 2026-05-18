@@ -1,0 +1,214 @@
+<!doctype html>
+
+<html>
+
+  <head>
+    <meta charset="UTF-8"/> <!-- charaketry -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script> <!-- charaketry -->
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.js"></script> <!-- charaketry -->
+  </head>
+
+<!------------------------------------------------->
+
+  <body>
+
+  <!-- A-FRAME - NAČÍTÁME ZE SKRIPTU, reprezentace 3d objektů na scéně z knihovny a-frame-->
+
+  <a-scene fog="type: exponential; color: #000; density: 0.001">
+
+      <a-sky 
+        src="sky1.jpg" 
+        rotation="0 180 0"
+        animation="property: rotation; to: 0 360 0; dur: 1200000; loop: true; easing: linear"
+      ></a-sky> 
+
+      <!-- světla, různé druhy-->
+      <a-light 
+          type="directional"
+          position="80 60 -80"
+          intensity="1.2"
+          color="#b7dfff"
+      ></a-light> 
+
+      <a-light type="ambient" intensity="0.35" color="#4d6f8f"></a-light>
+
+      <!-- vizuální kotouč slunce — flat sphere aby ji světlo neovlivňovalo -->
+      <a-sphere src="moon.jpg"
+          position="0 0 20"
+          radius="5"
+          material="shader: flat; color: #fff"
+      ></a-sphere>
+
+      <!-- kamera hráče, jako eentita - prázdný komponent, taková přihrádka -->
+      <a-entity id="rig" position="0 4 0" custom-controls>
+        <a-camera look-controls wasd-controls="enabled: false"></a-camera>
+      </a-entity>
+
+      <a-entity id="terrain"></a-entity>
+
+  </a-scene>
+
+<!------------------------------------------------->
+
+  <script>
+
+    let waterMesh;
+    let waterLevel = -2;
+
+    const sceneEl = document.querySelector("a-scene");
+    const scene = sceneEl.object3D;
+
+    // vytváří komponentu AFRAME
+    // tady připojujeme vlastně komponentu k objektu
+    // specificky custom-controls
+
+    // -------------------//
+
+    AFRAME.registerComponent("custom-controls", {
+
+        // init - spustí se pouze JEDNOU
+        init: function () {
+            // sledujeme stisknutí a stisknuté klávesy a co vykonají 
+            this.keys = {};
+            this.speed = 10;
+            window.addEventListener("keydown", (e) => (this.keys[e.code] = true));
+            window.addEventListener("keyup", (e) => (this.keys[e.code] = false));
+        }, 
+        
+        // tick - se volá KAŽDÝ FRAME
+        tick: function (t, dt) { // sledujeme čas od spuštění a od minulého framu
+         const dt_s = dt / 1000; // delta time v sekundách
+         const cam = this.el.querySelector("a-camera"); // kamera
+         const rig = this.el.object3D; // objekt 
+         const speed = this.speed * dt_s; 
+
+          const y = rig.position.y;
+
+          if (y < waterLevel) {
+            scene.fog.density = 0.02;
+            scene.fog.color.set(0x001a2a);
+          } else {
+            scene.fog.density = 0.002;
+            scene.fog.color.set(0x000);
+          }
+
+         // směr kam kamera kouká, bez vertikální složky - lítám v jedné výšce
+         const dir = new THREE.Vector3();
+         cam.object3D.getWorldDirection(dir);
+         dir.y = 0;
+         dir.normalize();
+         
+         // pravý vektor — kolmo na směr pohledu
+         const right = new THREE.Vector3();
+         right.crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+
+         // podle zmáčknuté klávesy si volím kam letím basically
+         if (this.keys["KeyW"]) rig.position.addScaledVector(dir, -speed);
+         if (this.keys["KeyS"]) rig.position.addScaledVector(dir, speed);
+         if (this.keys["KeyA"]) rig.position.addScaledVector(right, -speed);
+         if (this.keys["KeyD"]) rig.position.addScaledVector(right, speed);
+
+         // změna výšky
+        if (this.keys["Space"]) rig.position.y += speed;
+        if (this.keys["ShiftLeft"]) rig.position.y -= speed;
+        
+       },
+
+     });
+
+    // -------------------//
+
+     // noise pro naše objekty
+     const simplex = new SimplexNoise();
+
+     function noise(x, z) {
+       const macro = simplex.noise2D(x * 0.05, z * 0.05) * 3.0; // velké kopce
+       const mid = simplex.noise2D(x * 0.15, z * 0.15) * 0.5; // střední detaily
+       const micro = simplex.noise2D(x * 0.4, z * 0.4) * 0.4; // drobné detaily
+       return macro + mid + micro; // kombo vrtsvy tak je to pak random
+     }
+
+    // GENERACE TERÉNU
+    // sít a seznam všech vertexů, pak náhodně mapuje výšku terénu
+     function generateTerrain() {
+
+       const scene = document.querySelector("a-scene").object3D;
+       const geo = new THREE.PlaneGeometry(1000, 1000, 200, 200); 
+       geo.rotateX(-Math.PI / 2);
+       const pos = geo.attributes.position.array;
+
+       for (let i = 0; i < pos.length; i += 3) {
+         pos[i + 1] = noise(pos[i], pos[i + 2]);
+       }
+
+       geo.attributes.position.needsUpdate = true;
+       geo.computeVertexNormals();
+       const mesh = new THREE.Mesh(
+         geo,
+         new THREE.MeshLambertMaterial({ color: 0x0d1b24 }),
+       );
+
+       mesh.position.set(0, -100, -20);
+       scene.add(mesh);
+     }
+
+    // GENERACE VODA
+    function generateWater() {
+
+      const scene = document.querySelector("a-scene").object3D;
+      const geo = new THREE.PlaneGeometry(1000, 1000, 200, 200);
+      geo.rotateX(-Math.PI / 2);
+
+      const mat = new THREE.MeshPhongMaterial({
+        color: 0x233F70,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+      });
+
+      waterMesh = new THREE.Mesh(geo, mat);
+      waterMesh.position.set(0, 0, -20);
+      scene.add(waterMesh);
+    }
+
+    // GENERACE POHYB VODA
+    function animateWater(time) {
+
+      if (!waterMesh) return;
+      const pos = waterMesh.geometry.attributes.position.array;
+      for (let i = 0; i < pos.length; i += 3) {
+        const x = pos[i];
+        const z = pos[i + 2];
+
+        pos[i + 1] =
+          simplex.noise3D(
+            x * 0.02,
+            z * 0.02,
+            time * 0.0002
+          ) * 1.5;
+      }
+      waterMesh.geometry.attributes.position.needsUpdate = true;
+      waterMesh.geometry.computeVertexNormals();
+    }
+
+    // ANIMACE VODY
+    function animate(time) {
+      animateWater(time);
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+
+
+     // kdžy je scéna načtená, tak vygeneruje plochu a mraky
+     document.querySelector("a-scene").addEventListener("loaded", function () {
+       generateTerrain();
+       generateWater();
+     });
+
+
+    </script>
+  </body>
+
+</html>
+

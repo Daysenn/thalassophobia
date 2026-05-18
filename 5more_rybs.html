@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+</head>
+
+<body>
+
+<a-scene fog="type: exponential; color: #000814; density: 0.002">
+
+  <a-light type="ambient" intensity="0.6"></a-light>
+
+  <a-entity id="rig" position="0 5 0" movement>
+    <a-camera look-controls wasd-controls="enabled: false"></a-camera>
+  </a-entity>
+
+  <a-entity id="fishContainer"></a-entity>
+  <a-plane src="#ground" height="100" width="100" rotation="-90 0 0"></a-plane>
+
+</a-scene>
+
+<script>
+
+const sceneEl = document.querySelector("a-scene");
+const scene = sceneEl.object3D;
+
+const CHUNK_SIZE = 200;
+const RENDER_DISTANCE = 20;
+
+const chunks = {};
+
+const fishes = [];
+const MAX_FISH = 200;
+let lastSpawn = 0;
+
+// ---------------- PLAYER ----------------
+
+AFRAME.registerComponent("movement", {
+
+  init: function () {
+    this.keys = {};
+    this.speed = 30;
+
+    window.addEventListener("keydown", (e) => this.keys[e.code] = true);
+    window.addEventListener("keyup", (e) => this.keys[e.code] = false);
+  },
+
+  tick: function (t, dt) {
+
+    const dt_s = dt / 1000;
+    const rig = this.el.object3D;
+    const cam = this.el.querySelector("a-camera");
+
+    const speed = this.speed * dt_s;
+
+    const dir = new THREE.Vector3();
+    cam.object3D.getWorldDirection(dir);
+    dir.y = 0;
+    dir.normalize();
+
+    const right = new THREE.Vector3()
+      .crossVectors(dir, new THREE.Vector3(0,1,0))
+      .normalize();
+
+    if (this.keys["KeyW"]) rig.position.addScaledVector(dir, -speed);
+    if (this.keys["KeyS"]) rig.position.addScaledVector(dir, speed);
+    if (this.keys["KeyA"]) rig.position.addScaledVector(right, -speed);
+    if (this.keys["KeyD"]) rig.position.addScaledVector(right, speed);
+
+    if (this.keys["Space"]) rig.position.y += speed;
+    if (this.keys["ShiftLeft"]) rig.position.y -= speed;
+
+    const worldPos = new THREE.Vector3();
+    rig.getWorldPosition(worldPos);
+
+    maybeSpawnFish(worldPos, t);
+
+  }
+});
+
+
+// ---------------- FISH SYSTEM (jen kolem hráče) ----------------
+
+function spawnFish(px, py, pz) {
+
+  const x = px + (Math.random() - 0.5) * 60;
+  const z = pz + (Math.random() - 0.5) * 60;
+  const y = py + (Math.random() - 0.5) * 60;
+
+  const fish = document.createElement("a-sphere");
+  const size = 0.1 + Math.random() * 0.5;
+
+  fish.setAttribute("radius", size);
+  fish.setAttribute("color", "#44aaff");
+  fish.setAttribute("position", `${x} ${y} ${z}`);
+
+  document.querySelector("#fishContainer").appendChild(fish);
+
+  fish.addEventListener("loaded", () => {
+    fish.object3D.frustumCulled = false;
+    fish.object3D.matrixAutoUpdate = true;
+    fish.object3D.updateMatrixWorld(true);
+  });
+
+  fishes.push({
+    el: fish,
+    vx: (Math.random() - 0.5) * 0.05,
+    vy: (Math.random() - 0.5) * 0.03,
+    vz: (Math.random() - 0.5) * 0.05
+  });
+
+  fish.setAttribute("visible", "true");
+  fish.object3D.visible = true;
+  fish.object3D.frustumCulled = false;
+
+}
+
+function maybeSpawnFish(pos, time) {
+
+  if (time - lastSpawn < 500) return;
+  for (let i = 0; i < 20; i++) {
+    spawnFish(pos.x, pos.y, pos.z);
+  }
+
+  lastSpawn = time;
+}
+
+
+function animateFish() {
+
+  for (const f of fishes) {
+
+    const p = f.el.object3D.position;
+    f.el.object3D.updateMatrixWorld(true);
+
+    p.x += f.vx;
+    p.y += f.vy;
+    p.z += f.vz;
+
+    if (p.y > -1) f.vy = -Math.abs(f.vy);
+    if (p.y < -40) f.vy = Math.abs(f.vy);
+
+    const angle = Math.atan2(f.vx, f.vz) * 180 / Math.PI;
+    f.el.object3D.rotation.y = angle;
+  }
+}
+
+// ---------------- LOOP ----------------
+
+function animate() {
+  animateFish();
+  requestAnimationFrame(animate);
+}
+
+animate();
+
+
+</script>
+
+</body>
+</html>

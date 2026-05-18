@@ -1,0 +1,395 @@
+<!doctype html>
+
+<html>
+
+<head>
+  <meta charset="UTF-8"/>
+
+  <!-- A-FRAME -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+  <!-- SIMPLEX NOISE -->
+  <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.js"></script>
+</head>
+
+<body>
+
+<a-scene fog="type: exponential; color: #000814; density: 0.002">
+
+  <!-- NEBE -->
+  <a-sky
+    src="sky1.jpg"
+    rotation="0 180 0"
+  ></a-sky>
+
+  <!-- SVĚTLA -->
+  <a-light
+    type="directional"
+    position="50 80 -50"
+    intensity="10"
+    color="#88bbff"
+  ></a-light>
+
+  <a-light
+    type="ambient"
+    intensity="10"
+    color="#446688"
+  ></a-light>
+
+  <!-- KAMERA -->
+  <a-entity id="rig" position="0 5 0" custom-controls>
+    <a-camera look-controls wasd-controls="enabled: false"></a-camera>
+  </a-entity>
+
+</a-scene>
+
+<script>
+
+  // =====================================================
+  // ZÁKLAD
+  // =====================================================
+
+  const simplex = new SimplexNoise();
+
+  const sceneEl = document.querySelector("a-scene");
+  const scene = sceneEl.object3D;
+
+  const CHUNK_SIZE = 200;
+  const CHUNK_SEGMENTS = 100;
+  const RENDER_DISTANCE = 2;
+
+  const chunks = {};
+
+  let waterMeshes = [];
+
+  // =====================================================
+  // OVLÁDÁNÍ
+  // =====================================================
+
+  AFRAME.registerComponent("custom-controls", {
+
+    init: function () {
+
+      this.keys = {};
+      this.speed = 20;
+
+      window.addEventListener("keydown", (e) => {
+        this.keys[e.code] = true;
+      });
+
+      window.addEventListener("keyup", (e) => {
+        this.keys[e.code] = false;
+      });
+    },
+
+    tick: function (t, dt) {
+
+      const dt_s = dt / 1000;
+
+      const cam = this.el.querySelector("a-camera");
+      const rig = this.el.object3D;
+
+      const speed = this.speed * dt_s;
+
+      const dir = new THREE.Vector3();
+      cam.object3D.getWorldDirection(dir);
+
+      dir.y = 0;
+      dir.normalize();
+
+      const right = new THREE.Vector3();
+      right.crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+
+      // pohyb
+
+      if (this.keys["KeyW"]) {
+        rig.position.addScaledVector(dir, -speed);
+      }
+
+      if (this.keys["KeyS"]) {
+        rig.position.addScaledVector(dir, speed);
+      }
+
+      if (this.keys["KeyA"]) {
+        rig.position.addScaledVector(right, -speed);
+      }
+
+      if (this.keys["KeyD"]) {
+        rig.position.addScaledVector(right, speed);
+      }
+
+      // nahoru / dolů
+
+      if (this.keys["KeyQ"]) {
+        rig.position.y -= speed;
+      }
+
+      if (this.keys["KeyE"]) {
+        rig.position.y += speed;
+      }
+
+      // =================================================
+      // FOG POD HLADINOU
+      // =================================================
+
+      if (rig.position.y < 0) {
+
+        scene.fog.density = 0.02;
+        scene.fog.color.set(0x00111f);
+
+      } else {
+
+        scene.fog.density = 0.002;
+        scene.fog.color.set(0x000814);
+      }
+
+      // =================================================
+      // SKY FOLLOW
+      // =================================================
+
+      const sky = document.querySelector("a-sky");
+
+      sky.object3D.position.copy(rig.position);
+
+      // =================================================
+      // CHUNKY
+      // =================================================
+
+      updateChunks(rig.position.x, rig.position.z);
+    }
+  });
+
+  // =====================================================
+  // NOISE
+  // =====================================================
+
+  function terrainNoise(x, z) {
+
+    const macro =
+      simplex.noise2D(x * 0.002, z * 0.002) * 25;
+
+    const mid =
+      simplex.noise2D(x * 0.01, z * 0.01) * 6;
+
+    const micro =
+      simplex.noise2D(x * 0.05, z * 0.05) * 1.5;
+
+    return macro + mid + micro;
+  }
+
+  // =====================================================
+  // GENERACE CHUNKU
+  // =====================================================
+
+  function generateChunk(chunkX, chunkZ) {
+
+    const key = chunkX + "," + chunkZ;
+
+    if (chunks[key]) return;
+
+    const group = new THREE.Group();
+
+    // =================================================
+    // DNO
+    // =================================================
+
+    const geo = new THREE.PlaneGeometry(
+      CHUNK_SIZE,
+      CHUNK_SIZE,
+      CHUNK_SEGMENTS,
+      CHUNK_SEGMENTS
+    );
+
+    geo.rotateX(-Math.PI / 2);
+
+    const pos = geo.attributes.position.array;
+
+    for (let i = 0; i < pos.length; i += 3) {
+
+      const worldX = pos[i] + chunkX * CHUNK_SIZE;
+      const worldZ = pos[i + 2] + chunkZ * CHUNK_SIZE;
+
+      pos[i + 1] =
+        terrainNoise(worldX, worldZ) - 80;
+    }
+
+    geo.attributes.position.needsUpdate = true;
+    geo.computeVertexNormals();
+
+    const terrain = new THREE.Mesh(
+
+      geo,
+
+      new THREE.MeshLambertMaterial({
+        color: 0x0a1620,
+        side: THREE.DoubleSide
+      })
+    );
+
+    terrain.position.set(
+      chunkX * CHUNK_SIZE,
+      0,
+      chunkZ * CHUNK_SIZE
+    );
+
+    group.add(terrain);
+
+    // =================================================
+    // VODA
+    // =================================================
+
+    const waterGeo = new THREE.PlaneGeometry(
+      CHUNK_SIZE,
+      CHUNK_SIZE,
+      80,
+      80
+    );
+
+    const originalPositions =
+    waterGeo.attributes.position.array.slice();
+
+    waterGeo.userData.originalPositions =
+    originalPositions;
+
+    waterGeo.rotateX(-Math.PI / 2);
+
+    const water = new THREE.Mesh(
+
+      waterGeo,
+
+      new THREE.MeshPhongMaterial({
+
+        color: 0x1f4f88,
+
+        transparent: true,
+        opacity: 0.55,
+
+        side: THREE.DoubleSide,
+
+        shininess: 8
+      })
+    );
+
+    water.position.set(
+      chunkX * (CHUNK_SIZE - 1),
+      0,
+      chunkZ * (CHUNK_SIZE - 1)
+    );
+
+    waterMeshes.push(water);
+
+    group.add(water);
+
+    // =================================================
+    // PŘIDÁNÍ
+    // =================================================
+
+    scene.add(group);
+
+    chunks[key] = group;
+  }
+
+  // =====================================================
+  // UPDATE CHUNKŮ
+  // =====================================================
+
+  function updateChunks(playerX, playerZ) {
+
+    const currentChunkX =
+      Math.floor(playerX / CHUNK_SIZE);
+
+    const currentChunkZ =
+      Math.floor(playerZ / CHUNK_SIZE);
+
+    for (
+      let x = -RENDER_DISTANCE;
+      x <= RENDER_DISTANCE;
+      x++
+    ) {
+
+      for (
+        let z = -RENDER_DISTANCE;
+        z <= RENDER_DISTANCE;
+        z++
+      ) {
+
+        generateChunk(
+          currentChunkX + x,
+          currentChunkZ + z
+        );
+      }
+    }
+  }
+
+  // =====================================================
+  // ANIMACE VODY
+  // =====================================================
+
+function animateWater(time) {
+
+  for (const water of waterMeshes) {
+
+    const pos =
+      water.geometry.attributes.position.array;
+
+    const original =
+      water.geometry.userData.originalPositions;
+
+    for (let i = 0; i < pos.length; i += 3) {
+
+      const localX = original[i];
+      const localZ = original[i + 2];
+
+      const worldX = localX + water.position.x;
+      const worldZ = localZ + water.position.z;
+
+      // vrátíme původní pozice
+      pos[i] = localX;
+      pos[i + 2] = localZ;
+
+      // výška vlny
+      pos[i + 1] =
+
+        simplex.noise3D(
+
+          worldX * 0.015,
+          worldZ * 0.015,
+          time * 0.00015
+
+        ) * 2.5;
+    }
+
+    water.geometry.attributes.position.needsUpdate = true;
+    water.geometry.computeVertexNormals();
+  }
+}
+
+  // =====================================================
+  // LOOP
+  // =====================================================
+
+  function animate(time) {
+
+    animateWater(time);
+
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+
+  // =====================================================
+  // START
+  // =====================================================
+
+  document
+    .querySelector("a-scene")
+    .addEventListener("loaded", function () {
+
+      updateChunks(0, 0);
+    });
+
+</script>
+
+</body>
+</html>
+

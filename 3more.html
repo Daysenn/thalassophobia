@@ -1,0 +1,300 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+</head>
+
+<body>
+
+<a-scene fog="type: exponential; color: #000814; density: 0.002">
+
+  <a-sky id="sky"
+         src="sky1.jpg"
+         rotation="0 180 0"
+         animation="property: rotation; to: 0 540 0; dur: 1200000; loop: true; easing: linear">
+  </a-sky>
+
+  <a-light type="ambient" intensity="0.6"></a-light>
+
+  <a-entity id="rig" position="0 5 0" movement>
+    <a-camera look-controls wasd-controls="enabled: false"></a-camera>
+  </a-entity>
+
+  <a-entity id="fishContainer"></a-entity>
+
+      <a-cylinder position="0 0 0" radius="5" height="2" color="#FFC65D"></a-cylinder>
+      <a-cylinder position="-50 0 -50" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
+      <a-cylinder position="-50 0 50" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
+      <a-cylinder position="50 0 50" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
+      <a-cylinder position="50 0 -50" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
+
+</a-scene>
+
+<script>
+
+const sceneEl = document.querySelector("a-scene");
+const scene = sceneEl.object3D;
+
+const CHUNK_SIZE = 200;
+const RENDER_DISTANCE = 2;
+
+const chunks = {};
+
+const fishes = [];
+const MAX_FISH = 120;
+let lastSpawn = 0;
+
+
+////////////////////////////////////////////////////////////////////
+// ---------------- PLAYER ----------------
+
+AFRAME.registerComponent("movement", {
+
+  init: function () {
+    this.keys = {};
+    this.speed = 20;
+
+    window.addEventListener("keydown", (e) => this.keys[e.code] = true);
+    window.addEventListener("keyup", (e) => this.keys[e.code] = false);
+  },
+
+  tick: function (t, dt) {
+
+    const dt_s = dt / 1000;
+    const rig = this.el.object3D;
+    const cam = this.el.querySelector("a-camera");
+
+    const speed = this.speed * dt_s;
+
+    const dir = new THREE.Vector3();
+    cam.object3D.getWorldDirection(dir);
+    dir.y = 0;
+    dir.normalize();
+
+    const right = new THREE.Vector3()
+      .crossVectors(dir, new THREE.Vector3(0,1,0))
+      .normalize();
+
+    if (this.keys["KeyW"]) rig.position.addScaledVector(dir, -speed);
+    if (this.keys["KeyS"]) rig.position.addScaledVector(dir, speed);
+    if (this.keys["KeyA"]) rig.position.addScaledVector(right, -speed);
+    if (this.keys["KeyD"]) rig.position.addScaledVector(right, speed);
+
+    if (this.keys["Space"]) rig.position.y += speed;
+    if (this.keys["ShiftLeft"]) rig.position.y -= speed;
+
+    document.querySelector("#sky").object3D.position.copy(rig.position);
+
+    if (rig.position.y < 0) {
+      scene.fog.density = 0.005;
+      scene.fog.color.set(0x00111f);
+    } else {
+      scene.fog.density = 0.002;
+      scene.fog.color.set(0x000814);
+    }
+
+    updateChunks(rig.position.x, rig.position.z);
+
+    const worldPos = new THREE.Vector3();
+    rig.getWorldPosition(worldPos);
+
+    maybeSpawnFish(worldPos, t);
+    cleanupFish(worldPos);
+  }
+});
+
+////////////////////////////////////////////////////////////////////
+// ---------------- NOISE ----------------
+
+  function terrainNoise(x, z) {
+    const macro =
+      simplex.noise2D(x * 0.002, z * 0.002) * 25;
+    const mid =
+      simplex.noise2D(x * 0.01, z * 0.01) * 6;
+    const micro =
+      simplex.noise2D(x * 0.05, z * 0.05) * 1.5;
+    return macro + mid + micro;
+  }
+
+
+//////////////////////////////////////////////////////////////////////
+// ---------------- CHUNKS
+
+function generateChunk(x, z) {
+
+  const key = x + "," + z;
+  if (chunks[key]) return;
+
+  const group = new THREE.Group();
+
+  const sea = new THREE.Mesh(
+    new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE),
+    new THREE.MeshPhongMaterial({
+      color: 0x1a4d7a,
+      transparent: true,
+      opacity: 0.7,
+      side: THREE.DoubleSide
+    })
+  );
+
+  sea.rotation.x = -Math.PI / 2;
+  group.add(sea);
+
+  const texture = new THREE.TextureLoader().load("dno.jpg");
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(10, 10);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE),
+    new THREE.MeshLambertMaterial({ map: texture, side: THREE.DoubleSide })
+  );
+
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -200;
+
+  group.add(floor);
+
+  group.position.set(x * CHUNK_SIZE, 0, z * CHUNK_SIZE);
+
+  scene.add(group);
+  chunks[key] = group;
+}
+
+function updateChunks(px, pz) {
+
+  const cx = Math.floor(px / CHUNK_SIZE);
+  const cz = Math.floor(pz / CHUNK_SIZE);
+
+  const needed = new Set();
+
+  for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
+    for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
+
+      const key = (cx + x) + "," + (cz + z);
+      needed.add(key);
+
+      if (!chunks[key]) {
+        generateChunk(cx + x, cz + z);
+      }
+    }
+  }
+
+  for (const key in chunks) {
+    if (!needed.has(key)) {
+      scene.remove(chunks[key]);
+      delete chunks[key];
+    }
+  }
+}
+
+// ---------------- FISH SYSTEM (jen kolem hráče) ----------------
+
+function spawnFish(px, py, pz) {
+
+  const x = px + (Math.random() - 0.5) * 60;
+  const z = pz + (Math.random() - 0.5) * 60;
+  const y = Math.min(
+    py + (Math.random() - 0.5) * 60,
+    -1
+  );
+
+  const fish = document.createElement("a-sphere");
+
+  const size = 0.1 + Math.random() * 0.5;
+  fish.setAttribute("radius", size);
+
+  fish.setAttribute("color", "#44aaff");
+  fish.setAttribute("position", `${x} ${y} ${z}`);
+
+  document.querySelector("#fishContainer").appendChild(fish);
+
+  fish.addEventListener("loaded", () => {
+    fish.object3D.frustumCulled = false;
+    fish.object3D.matrixAutoUpdate = true;
+    fish.object3D.updateMatrixWorld(true);
+  });
+
+  fishes.push({
+    el: fish,
+    vx: (Math.random() - 0.5) * 0.05,
+    vy: (Math.random() - 0.5) * 0.03,
+    vz: (Math.random() - 0.5) * 0.05
+  });
+
+  fish.setAttribute("visible", "true");
+  fish.object3D.visible = true;
+
+  
+}
+
+function maybeSpawnFish(pos, time) {
+
+  if (time - lastSpawn < 1000) return;
+
+  for (let i = 0; i < 5; i++) {
+    spawnFish(pos.x, pos.y, pos.z);
+  }
+
+  lastSpawn = time;
+}
+
+function cleanupFish(pos) {
+
+  for (let i = fishes.length - 1; i >= 0; i--) {
+
+    const f = fishes[i];
+    const p = f.el.object3D.position;
+
+    const dx = p.x - pos.x;
+    const dz = p.z - pos.z;
+
+    if (Math.sqrt(dx*dx + dz*dz) > 80) {
+      f.el.remove();
+      fishes.splice(i, 1);
+    }
+  }
+}
+
+function animateFish() {
+
+  for (const f of fishes) {
+
+    const p = f.el.object3D.position;
+    f.el.object3D.updateMatrixWorld(true);
+
+    p.x += f.vx;
+    p.y += f.vy;
+    p.z += f.vz;
+
+    if (p.y > -1) f.vy = -Math.abs(f.vy);
+    if (p.y < -40) f.vy = Math.abs(f.vy);
+
+    const angle = Math.atan2(f.vx, f.vz) * 180 / Math.PI;
+    f.el.object3D.rotation.y = angle;
+  }
+}
+
+// ---------------- LOOP ----------------
+
+function animate() {
+  animateFish();
+  requestAnimationFrame(animate);
+}
+
+animate();
+
+// ---------------- START ----------------
+
+function startWorld() {
+  updateChunks(0, 0);
+}
+
+if (sceneEl.hasLoaded) startWorld();
+else sceneEl.addEventListener("loaded", startWorld);
+
+</script>
+
+</body>
+</html>

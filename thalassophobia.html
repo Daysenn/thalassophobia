@@ -1,0 +1,672 @@
+<!doctype html>
+  <html>
+    <head>
+      <meta charset="UTF-8"/>
+      <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.js"></script>
+    </head>
+
+
+  <body>
+
+<!--
+git add .
+git commit -m "nazev-verze"
+git push    
+-->   
+ 
+<!----------------------------------------->
+<!-- SCÉNA -------------------------------->
+
+    <a-scene fog="type: exponential; color: #FFA629; density: 0.0005">
+
+      <!-- OBLOHA -->
+      <a-sky id="sky"
+            src="sky1.jpg"
+            rotation="0 180 0"
+            animation="property: rotation; to: 0 540 0; dur: 1200000; loop: true; easing: linear"
+            fog="false">
+      </a-sky>
+
+      <!-- SVĚTLA -->
+      <a-light type="ambient" intensity="0.35" color="#4d6f8f"></a-light>
+      <a-light type="hemisphere" color="#7076CF" groundColor="#083B2B" intensity="0.3" color="#88aaff"></a-light>
+      <a-light type="directional" position="20 50 0" intensity="0.7" color="#00F7FF" ></a-light> 
+
+
+      <!-- HRÁČ A KAMERA -->
+      <a-entity id="rig" position="0 5 0" movement>
+        <a-camera look-controls wasd-controls="enabled: false"
+        ></a-camera>
+      </a-entity>
+
+      <a-entity id="svet"></a-entity>
+
+      <a-assets>
+        <a-asset-item id="dum" src="dum.glb"></a-asset-item>
+        <a-asset-item id="ruins" src="ruins.glb"></a-asset-item>
+        <a-asset-item id="bigR" src="kelp_plant.glb"></a-asset-item>
+        <a-asset-item id="bigK" src="big_kamen.glb"></a-asset-item>
+        <a-asset-item id="miniK" src="kameni.glb"></a-asset-item>
+        <a-asset-item id="travka" src="grass.glb"></a-asset-item>
+        <a-asset-item id="lod" src="sail_lod.glb"></a-asset-item>
+      </a-assets>
+
+      <a-entity position="-20 0 -50"> 
+        <a-entity 
+          gltf-model="#lod"
+          position="0 0 0"
+          scale="50 50 50"
+          visible="true">
+        </a-entity>
+      </a-entity> 
+
+      <a-entity position="-50 -620 -20"> 
+        <a-entity 
+          gltf-model="#ruins"
+          position="0 0 0"
+          scale="5 5 5"
+          visible="true">
+        </a-entity>
+      </a-entity> 
+
+    </a-scene>
+
+    <audio id="music" loop>
+      <source src="music.mp3" type="audio/mpeg">
+    </audio>
+
+<!----------------------------------------->
+<!-- SKRIPT ------------------------------->
+
+    <script>
+
+    ///////////////////////////////////////////////////////////////////
+    // PLAYER MOVEMENT
+    AFRAME.registerComponent("movement", {
+
+      // -----------------------------------
+      //// INIT !!! = spustí se jednou na začátku 
+      init: function () { 
+        this.keys = {}; // seznam zmáčknutých kláves
+        this.speed = 40; // rychlost pohybu
+        this.idleTime = 0; // idle animace 
+        this.lightEl = document.querySelector("#mainLight");
+
+        window.addEventListener("keydown", (e) => { // KDYŽ zmáčkneme klávesu
+          this.keys[e.code] = true;
+        });
+
+        window.addEventListener("keyup", (e) => {  // KDYŽ pustíme klávesu
+          this.keys[e.code] = false;
+        });
+      },
+
+      // -----------------------------------
+      //// TICK = spouští se každý frame 
+      tick: function (t, dt) { // delta time v sekundách
+        const dt_s = dt / 1000; // tělo hráče
+        const rig = this.el.object3D; // kamera hráče
+
+        const y = rig.position.y;
+        const sceneEl = document.querySelector("a-scene");
+
+        const kamera = this.el.querySelector("a-camera"); // výsledná rychlost
+        const rychlost = this.speed * dt_s; // směr kam se kamera dívá
+        const smer = new THREE.Vector3();
+
+        kamera.object3D.getWorldDirection(smer); // nechceme lítat nahoru a dolů
+        smer.y = 0;
+        smer.normalize(); // normalizace = délka vektoru bude 1
+
+        const right = new THREE.Vector3(); // pravý směr kamery
+        right.crossVectors( smer, new THREE.Vector3(0, 1, 0) ).normalize();
+
+        updateChunks( rig.position.x, rig.position.z);
+        document.querySelector("#sky").object3D.position.copy(rig.position); // sky sleduje hráče
+        cleanupChunks(rig.position.x, rig.position.z); // čistění vzdálených chunku
+
+      
+       if (y < 0) {
+          const depth = Math.min(Math.abs(y) / 300, 1);
+          sceneEl.setAttribute( "fog", `type: exponential; color: #001317; density: ${0.0002 + depth * 0.01}`);
+        } else {
+          sceneEl.setAttribute( "fog", "type: exponential; color: #FFA629; density: 0.0007" );
+        }    
+
+        // -----------------------------------
+        // POHYB
+
+        if (this.keys["KeyW"]) {rig.position.addScaledVector(smer,-rychlost);}
+        if (this.keys["KeyS"]) { rig.position.addScaledVector(smer,rychlost);}
+        if (this.keys["KeyD"]) {rig.position.addScaledVector(right,-rychlost);}
+        if (this.keys["KeyA"]) {rig.position.addScaledVector(right,rychlost);}
+        if (this.keys["Space"]) {rig.position.y += rychlost;}
+        if (this.keys["ShiftLeft"]) {rig.position.y -= rychlost;}
+
+        const moving =
+          this.keys["KeyW"] ||
+          this.keys["KeyS"] ||
+          this.keys["KeyA"] ||
+          this.keys["KeyD"] ||
+          this.keys["Space"] ||
+          this.keys["ShiftLeft"];
+
+        if (!moving) {
+          this.idleTime += dt_s;
+          // jemné houpání nahoru/dolů
+          kamera.object3D.position.y =
+            Math.sin(this.idleTime * 5) * 0.08;
+          // jemný náklon
+          kamera.object3D.rotation.z =
+            Math.sin(this.idleTime * 2) * 0.01;
+
+        } else {
+          this.idleTime = 0;
+          // reset
+          kamera.object3D.position.y = 0;
+          kamera.object3D.rotation.z = 0;
+        }
+
+      }
+    });
+
+    //////////////////////////////////////////////////////////////////
+    // SIMPLEX NOISE
+
+     const simplex = new SimplexNoise();
+
+     function noiseVoda(x, z, t = 0) {
+       const macro = simplex.noise3D(x * 0.009, z * 0.009, t) * 5.0; 
+       const mid = simplex.noise3D(x * 0.15, z * 0.15, t) * 0.5; 
+       const micro = simplex.noise3D(x * 0.4, z * 0.4, t) * 0.4; 
+       return macro + mid + micro; 
+     }  
+
+     function noiseDno(x, z, t = 0) {
+       const macro = simplex.noise3D(x * 0.02, z * 0.02, t) * 8.0; // velké kopce
+       const mid = simplex.noise3D(x * 0.15, z * 0.15, t) * 0.8; // střední detaily
+       const micro = simplex.noise3D(x * 0.4, z * 0.4, t) * 0.2; // drobné detaily
+       return macro + mid + micro; // kombo vrtsvy tak je to pak random
+     }  
+
+    ///////////////////////////////////////////////////////////////////
+    // CHUNKY
+
+    const CHUNK_SIZE = 100;
+    const RENDER_DISTANCE = 3; // jak daleko kolem hráče generujeme chunky
+    const chunky = {}; // seznam existujících chunků
+    let cas = 0;
+
+    const textureLoader = new THREE.TextureLoader();
+    const texturaDna =
+    textureLoader.load("dno1.jpg");
+    texturaDna.wrapS = THREE.RepeatWrapping;
+    texturaDna.wrapT = THREE.RepeatWrapping;
+    texturaDna.repeat.set(8, 8);
+
+    function hash(x, z) {
+      let h = x * 374761393 + z * 668265263;
+      h = (h ^ (h >> 13)) * 1274126177;
+      return (h ^ (h >> 16)) >>> 0;
+    }
+
+    function randFromSeed(seed) {
+      return (Math.sin(seed) * 10000) % 1;
+    }
+
+      //------------------------
+      // GENERATE CHUNKY
+    
+      function generateChunk(x, z) {
+        const key = x + "," + z; // unikátní jméno chunku
+        if (chunky[key]) return; // pokud už existuje → nic nedělej
+        const group = new THREE.Group(); // skupina pro celý chunk
+
+        // ---------------------------------------------------
+        // GEOMETRIE VODY
+
+        const geometrieVody =
+          new THREE.PlaneGeometry(
+            CHUNK_SIZE,
+            CHUNK_SIZE,
+            50,
+            50
+          );
+
+        
+        geometrieVody.rotateX(-Math.PI / 2); // otočení do vodorovna
+        const vrcholy = geometrieVody.attributes.position.array; // seznam vertexů
+
+        // deformace vertexů
+        for (let i = 0; i < vrcholy.length; i += 3) {
+          // lokální pozice vertexu
+          const xPos = vrcholy[i];
+          const zPos = vrcholy[i + 2];
+
+          // world pozice
+          const worldX = xPos + x * CHUNK_SIZE;
+          const worldZ = zPos + z * CHUNK_SIZE;
+
+          // noise výška
+          vrcholy[i + 1] = 0 + noiseVoda(worldX * 0.02, worldZ * 0.02, cas) * 2;
+        }
+
+        geometrieVody.attributes.position.needsUpdate = true; // řekneme THREE že se vertexy změnily
+        geometrieVody.computeVertexNormals(); // přepočet světla/normál
+
+        // ---------------------------------------------------
+        // VODA
+
+        const voda = new THREE.Mesh(
+          geometrieVody,
+          new THREE.MeshPhongMaterial({
+            color: 0x1a4d7a,
+            transparent: true,
+            opacity: 0.6,
+            side: THREE.DoubleSide,
+            flatShading: true
+          })
+
+        );
+
+         voda.userData.jeVoda = true;
+
+        //////////////////////////////////////////////////////
+        // DNO
+
+        const geometrieDna =
+          new THREE.PlaneGeometry(
+            CHUNK_SIZE,
+            CHUNK_SIZE,
+            50,
+            50
+          );
+
+        geometrieDna.rotateX(-Math.PI / 2);
+
+        const vrcholyDna =
+          geometrieDna.attributes.position.array;
+
+        for (let i = 0; i < vrcholyDna.length; i += 3) {
+
+          const xPos = vrcholyDna[i];
+          const zPos = vrcholyDna[i + 2];
+
+          const worldX =
+            xPos + x * CHUNK_SIZE;
+
+          const worldZ =
+            zPos + z * CHUNK_SIZE;
+
+          // DRUHÝ noise (jiná škála = jiný tvar)
+          const vyska = noiseDno(worldX * 0.09, worldZ * 0.09);
+
+          // dno je dole (proto minus a velká hloubka)
+          vrcholyDna[i + 1] =
+            -600 - (vyska * 5);
+        }
+
+        geometrieDna.attributes.position.needsUpdate = true;
+        geometrieDna.computeVertexNormals();
+
+        const dno = new THREE.Mesh(
+          geometrieDna,
+          new THREE.MeshLambertMaterial({
+            color: 0x88aa88,
+            map: texturaDna,
+            flatShading: true
+          })
+        );
+
+        group.add(dno);
+
+        // ---------------------------------------------------
+        // POZICE CHUNKU
+
+        group.position.set(
+
+          x * CHUNK_SIZE,
+          0,
+          z * CHUNK_SIZE
+        );
+
+        document // přidání do scény
+          .querySelector("#svet")
+          .object3D
+          .add(group);
+
+        chunky[key] = group; // uložíme chunk
+
+        group.add(voda);
+        spawnObjectsInChunk(group, x, z);
+        spawnFishInChunk(group, x, z);
+
+      }
+
+
+        // ---------------------------------------------------
+        // GENEROVÁNÍ NÁHODNÉHO OBSAHU
+
+        function spawnObjectsInChunk(group, chunkX, chunkZ) {
+
+          const seed = hash(chunkX, chunkZ);
+          const count = Math.floor(randFromSeed(seed) * 10); // počet objektů
+
+          for (let i = 0; i < count; i++) {
+
+            const s = seed + i * 999;
+            const r = randFromSeed(s);
+
+            const x = (randFromSeed(s + 1) - 0.5) * CHUNK_SIZE;
+            const z = (randFromSeed(s + 2) - 0.5) * CHUNK_SIZE;
+
+            const worldX = x + chunkX * CHUNK_SIZE;
+            const worldZ = z + chunkZ * CHUNK_SIZE;
+            const y = getDnoHeight(worldX, worldZ);
+
+            let obj;
+
+            // 2% že se objeví tenhle objekt
+            if (r < 0.2) {
+              obj = document.createElement("a-entity");
+              obj.setAttribute("gltf-model", "#bigK");
+
+              obj.setAttribute(
+                "position",
+                `${worldX} ${y + -5} ${worldZ}`
+              );
+
+              obj.setAttribute(
+                "scale",
+                "150 150 150"
+              );
+
+              obj.setAttribute(
+                "rotation",
+                `0 ${randFromSeed(s + 4) * 360} 0`
+              );
+
+              const modelContainer = document.createElement("a-entity");
+              document.querySelector("a-scene").appendChild(modelContainer);
+              modelContainer.appendChild(obj);
+              continue;
+
+            // 2% že se objeví tenhle objekt
+            } else if (r < 0.4) {
+              obj = document.createElement("a-entity");
+              obj.setAttribute("gltf-model", "#bigR");
+
+              obj.setAttribute(
+                "position",
+                `${worldX} ${y + -10} ${worldZ}`
+              );
+
+              obj.setAttribute(
+                "scale",
+                "2 2 2"
+              );
+
+              obj.setAttribute(
+                "rotation",
+                `0 ${randFromSeed(s + 4) * 360} 0`
+              );
+
+              obj.setAttribute(
+                "material",
+                "color: #ff0000"
+              );
+
+              const modelContainer = document.createElement("a-entity");
+              document.querySelector("a-scene").appendChild(modelContainer);
+              modelContainer.appendChild(obj);
+              continue;
+
+            } else if (r < 0.6) {
+              obj = document.createElement("a-entity");
+              obj.setAttribute("gltf-model", "#miniK");
+
+              obj.setAttribute(
+                "position",
+                `${worldX} ${y + -5} ${worldZ}`
+              );
+
+              obj.setAttribute(
+                "scale",
+                "100 100 100"
+              );
+
+              obj.setAttribute(
+                "rotation",
+                `0 ${randFromSeed(s + 4) * 360} 0`
+              );
+
+              const modelContainer = document.createElement("a-entity");
+              document.querySelector("a-scene").appendChild(modelContainer);
+              modelContainer.appendChild(obj);
+              continue;
+
+            // zbytek bude tenhle objekt
+            } else { 
+              obj = document.createElement("a-entity");
+              obj.setAttribute("gltf-model", "#travka");
+
+              obj.setAttribute(
+                "position",
+                `${worldX} ${y + -5} ${worldZ}`
+              );
+
+              obj.setAttribute(
+                "scale",
+                "20 20 20"
+              );
+
+              obj.setAttribute(
+                "rotation",
+                `0 ${randFromSeed(s + 4) * 360} 0`
+              );
+
+              const modelContainer = document.createElement("a-entity");
+              document.querySelector("a-scene").appendChild(modelContainer);
+              modelContainer.appendChild(obj);
+              continue;
+            }
+
+            obj.position.set(x, y + 10, z);
+            obj.rotation.y = randFromSeed(s + 4) * Math.PI;
+
+            group.add(obj);
+          }
+        }
+
+        function getDnoHeight(worldX, worldZ) {
+          const vyska = noiseDno(worldX * 0.09, worldZ * 0.09);
+          return -600 - (vyska * 5);
+        }
+
+      // ---------------------------------------------------
+      // AKTUALIZACE CHUNKU
+
+      function updateChunks(px, pz) {
+
+        // ve kterém chunku hráč je
+        const cx = Math.floor(px / CHUNK_SIZE);
+        const cz = Math.floor(pz / CHUNK_SIZE);
+
+        // generace chunků kolem hráče
+        for (let x = -RENDER_DISTANCE;
+            x <= RENDER_DISTANCE;
+            x++) {
+
+          for (let z = -RENDER_DISTANCE;
+              z <= RENDER_DISTANCE;
+              z++) {
+
+            generateChunk(
+              cx + x,
+              cz + z
+            );
+          }
+        }
+      }
+
+      // ---------------------------------------------------
+      // CLEANUP CHUNKU
+
+      function cleanupChunks(px, pz) {
+
+        const cx = Math.floor(px / CHUNK_SIZE);
+        const cz = Math.floor(pz / CHUNK_SIZE);
+
+        const keepDistance = RENDER_DISTANCE + 1;
+
+        for (const key in chunky) {
+
+          const [x, z] = key.split(",").map(Number);
+
+          const dx = x - cx;
+          const dz = z - cz;
+
+          if (Math.abs(dx) > keepDistance || Math.abs(dz) > keepDistance) {
+
+            const group = chunky[key];
+
+            // odebrání ze scény
+            document
+              .querySelector("#svet")
+              .object3D
+              .remove(group);
+
+            // uvolnění paměti
+            group.traverse(obj => {
+              if (obj.geometry) obj.geometry.dispose();
+              if (obj.material) obj.material.dispose();
+            });
+
+            delete chunky[key];
+          }
+        }
+      }
+
+      // ---------------------------------------------------
+      // ANIMACE VODY
+
+      function animateWater() {
+
+        for (const key in chunky) {
+
+          const group = chunky[key];
+          group.children.forEach((objekt) => {
+
+            if (!objekt.userData.jeVoda) return;
+
+            const geometrie = objekt.geometry;
+            const vrcholy =
+            geometrie.attributes.position.array;
+
+          for (let i = 0; i < vrcholy.length; i += 3) {
+
+            const lokalniX = vrcholy[i];
+            const lokalniZ = vrcholy[i + 2];
+
+            const worldX = lokalniX + group.position.x;
+            const worldZ = lokalniZ + group.position.z;
+
+            vrcholy[i + 1] =
+              noiseVoda(worldX * 0.5, worldZ * 0.5, cas) * 0.9;
+          }
+            geometrie.attributes.position.needsUpdate = true;
+
+
+          });
+        } 
+      }
+
+      // ---------------------------------------------------
+      // SPAWN RYBIN
+
+      function spawnFishInChunk(group, chunkX, chunkZ) {
+
+        const seed = hash(chunkX, chunkZ);
+        const count = 10 + Math.floor(randFromSeed(seed) * 20); 
+        // 10–30 ryb na chunk
+
+        for (let i = 0; i < count; i++) {
+
+          const s = seed + i * 999;
+
+          const x = (randFromSeed(s + 1) - 0.5) * CHUNK_SIZE;
+          const z = (randFromSeed(s + 2) - 0.5) * CHUNK_SIZE;
+
+          const worldX = x + chunkX * CHUNK_SIZE;
+          const worldZ = z + chunkZ * CHUNK_SIZE;
+
+          // výška dna (aby ryby nebyly v zemi)
+          const bottomY = getDnoHeight(worldX, worldZ);
+
+          // hloubka vody nad dnem
+          const waterTop = 0;
+
+          const y = bottomY + 2 + randFromSeed(s + 3) * (waterTop - bottomY - 5);
+
+          const fish = new THREE.Mesh(
+            new THREE.SphereGeometry(0.5 + randFromSeed(s + 4) * 0.8, 6, 6),
+            new THREE.MeshBasicMaterial({ color: 0x464987 })
+          );
+
+          fish.position.set(x, y, z);
+
+          // uložíme si data pro animaci
+          fish.userData = {
+            speed: 0.5 + randFromSeed(s + 5) * 1.5,
+            phase: randFromSeed(s + 6) * Math.PI * 2,
+            seed: s
+          };
+
+          group.add(fish);
+        }
+      }
+
+      function animateFish() {
+
+        for (const key in chunky) {
+
+          const group = chunky[key];
+          group.children.forEach(obj => {
+
+            if (!obj.userData || obj.userData.speed === undefined) return;
+
+            obj.userData.phase += 0.002 * obj.userData.speed;
+
+            obj.position.x += Math.sin(obj.userData.phase) * 0.2;
+            obj.position.z += Math.cos(obj.userData.phase) * 0.2;
+          });
+        }
+      }
+
+      // ---------------------------------------------------
+      // VOLÁNÍ ANIMACE
+
+      function animate() {
+        requestAnimationFrame(animate);
+        cas += 0.005;
+        animateWater();
+        animateFish();
+      }
+
+      animate();
+
+      window.addEventListener("click", () => {
+
+        const music = document.querySelector("#music");
+        music.volume = 0.4;
+        music.play();
+
+      }, { once: true });      
+
+
+    </script>
+
+  </body>
+
+  </html>
