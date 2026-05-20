@@ -212,10 +212,10 @@ git push
 
     const textureLoader = new THREE.TextureLoader();
     const texturaDna =
-    textureLoader.load("dno1.jpg");
-    texturaDna.wrapS = THREE.RepeatWrapping;
-    texturaDna.wrapT = THREE.RepeatWrapping;
-    texturaDna.repeat.set(8, 8);
+      textureLoader.load("dno1.jpg");
+      texturaDna.wrapS = THREE.RepeatWrapping;
+      texturaDna.wrapT = THREE.RepeatWrapping;
+      texturaDna.repeat.set(8, 8);
 
     function hash(x, z) {
       let h = x * 374761393 + z * 668265263;
