@@ -66,7 +66,7 @@ git push
         </a-entity>
       </a-entity> 
 
-      <a-entity position="-50 -620 -20"> 
+      <a-entity position="-300 -620 -200"> 
         <a-entity 
           gltf-model="#ruins"
           position="0 0 0"
@@ -75,7 +75,7 @@ git push
         </a-entity>
       </a-entity> 
 
-     <a-entity position="-250 -630 -150"> 
+     <a-entity position="-0 -630 -0"> 
         <a-entity 
           gltf-model="#ship1"
           position="0 0 0"
@@ -107,9 +107,6 @@ git push
         this.idleTime = 0; // idle animace 
         this.lightEl = document.querySelector("#mainLight");
 
-        this.underwaterTimer = 0;
-        this.playerSinking = false;
-
         window.addEventListener("keydown", (e) => { // KDYŽ zmáčkneme klávesu
           this.keys[e.code] = true;
         });
@@ -127,17 +124,6 @@ git push
 
         const y = rig.position.y;
         const sceneEl = document.querySelector("a-scene");
-
-        if (rig.position.y < 0) {
-          this.underwaterTimer += dt_s;
-        } else {
-          this.underwaterTimer = 0;
-          this.playerSinking = false;
-        }
-
-        if (rig.position.y < 0 && this.underwaterTimer > 5) {
-          this.playerSinking = true;
-        }
 
         const kamera = this.el.querySelector("a-camera"); // výsledná rychlost
         const rychlost = this.speed * dt_s; // směr kam se kamera dívá
@@ -194,15 +180,6 @@ git push
           // reset
           kamera.object3D.position.y = 0;
           kamera.object3D.rotation.z = 0;
-        }
-
-        if (this.playerSinking) {
-
-          if (rig.position.y > -450) {
-            rig.position.y -= dt_s * 5;
-          } else {
-            rig.position.y = -370;
-          }
         }
 
       }
