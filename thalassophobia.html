@@ -57,7 +57,7 @@ git push
         <a-asset-item id="zidka" src="zed.glb"></a-asset-item>
       </a-assets>
 
-      <a-entity position="-20 0 -50"> 
+      <a-entity position="-20 -2 -50"> 
         <a-entity 
           gltf-model="#lod"
           position="0 0 0"
@@ -115,14 +115,13 @@ git push
           this.keys[e.code] = false;
         });
 
-        /*
         this.stickX = 0;
         this.stickY = 0;
 
-        this.el.addEventListener("thumbstickmoved", (e) => {
-          this.stickX = e.detail.x;
-          this.stickY = e.detail.y;
-        }); */
+        this.el.sceneEl.addEventListener("axismove", (e) => {
+          this.stickX = e.detail.axis[0];
+          this.stickY = e.detail.axis[1];
+        });
 
       },
 
@@ -131,6 +130,10 @@ git push
       tick: function (t, dt) { // delta time v sekundách
         const dt_s = dt / 1000; // tělo hráče
         const rig = this.el.object3D; // kamera hráče
+
+        cas += (dt_s * 0.3);
+        animateWater();
+        animateFish();
 
         const y = rig.position.y;
         const sceneEl = document.querySelector("a-scene");
@@ -168,10 +171,8 @@ git push
         if (this.keys["Space"]) {rig.position.y += rychlost;}
         if (this.keys["ShiftLeft"]) {rig.position.y -= rychlost;}
 
-        /*
         rig.position.addScaledVector(smer, -this.stickY * rychlost);
         rig.position.addScaledVector(right, -this.stickX * rychlost);
-        */
 
         const moving =
           this.keys["KeyW"] ||
@@ -604,10 +605,9 @@ git push
             const worldZ = lokalniZ + group.position.z;
 
             vrcholy[i + 1] =
-              noiseVoda(worldX * 0.5, worldZ * 0.5, cas) * 0.9;
+              noiseVoda(worldX * 0.5, worldZ * 0.5, cas) * 0.7;
           }
             geometrie.attributes.position.needsUpdate = true;
-
 
           });
         } 
@@ -677,15 +677,6 @@ git push
 
       // ---------------------------------------------------
       // VOLÁNÍ ANIMACE
-
-      function animate() {
-        requestAnimationFrame(animate);
-        cas += 0.005;
-        animateWater();
-        animateFish();
-      }
-
-      animate();
 
       window.addEventListener("click", () => {
 
