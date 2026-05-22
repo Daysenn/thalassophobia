@@ -9,213 +9,152 @@
 
   <body>
 
+
 <!--
 git add .
 git commit -m "nazev-verze"
 git push    
 -->   
- 
+
 <!----------------------------------------->
 <!-- SCÉNA -------------------------------->
 
-    <a-scene fog="type: exponential; color: #FFA629; density: 0.0005">
+<a-scene
+  vr-mode-ui="enabled: true"
+  webxr="optionalFeatures: local-floor, bounded-floor"
+  fog="type: exponential; color: #FFA629; density: 0.0005">
 
-      <!-- OBLOHA -->
-      <a-sky id="sky"
-            src="sky1.jpg"
-            rotation="0 180 0"
-            animation="property: rotation; to: 0 540 0; dur: 1200000; loop: true; easing: linear"
-            fog="false">
-      </a-sky>
+  <!-- OBLOHA -->
+  <a-sky id="sky"
+         src="sky1.jpg"
+         rotation="0 180 0"
+         animation="property: rotation; to: 0 540 0; dur: 1200000; loop: true; easing: linear"
+         fog="false">
+  </a-sky>
 
-      <!-- SVĚTLA -->
-      <a-light type="ambient" intensity="0.35" color="#4d6f8f"></a-light>
-      <a-light type="hemisphere" color="#7076CF" groundColor="#083B2B" intensity="0.3" color="#88aaff"></a-light>
-      <a-light type="directional" position="20 50 0" intensity="0.7" color="#00F7FF" ></a-light> 
+  <!-- SVĚTLA -->
+  <a-light type="ambient" intensity="0.35" color="#4d6f8f"></a-light>
+
+  <a-light type="hemisphere"
+           color="#88aaff"
+           groundColor="#083B2B"
+           intensity="0.3"></a-light>
+
+  <a-light type="directional"
+           position="20 50 0"
+           intensity="0.7"
+           color="#00F7FF"></a-light> 
 
 
-      <!-- HRÁČ A KAMERA -->
-      <a-entity id="rig" position="0 5 0" movement>
-        <a-camera look-controls wasd-controls="enabled: false"
-        ></a-camera>
+  <!-- HRÁČ A KAMERA (VR READY) -->
+  <a-entity id="rig" position="0 5 0" movement>
 
-        <a-entity camera look-controls></a-entity>
+    <a-entity id="camera" camera look-controls></a-entity>
 
-          <!-- levý ovladač -->
-          <a-entity id="leftHand"
-                    laser-controls="hand: left"
-                    oculus-touch-controls="hand: left"
-                    vive-controls="hand: left">
-          </a-entity>
+    <!-- levý ovladač -->
+    <a-entity id="leftHand"
+              laser-controls="hand: left"
+              oculus-touch-controls="hand: left"
+              vive-controls="hand: left">
+    </a-entity>
 
-          <!-- pravý ovladač -->
-          <a-entity id="rightHand"
-                    laser-controls="hand: right"
-                    oculus-touch-controls="hand: right"
-                    vive-controls="hand: right">
-          </a-entity>
-      </a-entity>
+    <!-- pravý ovladač -->
+    <a-entity id="rightHand"
+              laser-controls="hand: right"
+              oculus-touch-controls="hand: right"
+              vive-controls="hand: right">
+    </a-entity>
 
-      <a-entity id="svet"></a-entity>
+  </a-entity>
 
-      <a-assets>
-        <a-asset-item id="ruins" src="ruins.glb"></a-asset-item>
+  <a-entity id="svet"></a-entity>
 
-        <a-asset-item id="bigR" src="kelp_plant.glb"></a-asset-item>
-        <a-asset-item id="bigK" src="big_kamen.glb"></a-asset-item>
-        <a-asset-item id="miniK" src="kameni.glb"></a-asset-item>
-        <a-asset-item id="travka" src="grass.glb"></a-asset-item>
+  <a-assets>
+    <a-asset-item id="ruins" src="ruins.glb"></a-asset-item>
+    <a-asset-item id="bigR" src="kelp_plant.glb"></a-asset-item>
+    <a-asset-item id="bigK" src="big_kamen.glb"></a-asset-item>
+    <a-asset-item id="miniK" src="kameni.glb"></a-asset-item>
+    <a-asset-item id="travka" src="grass.glb"></a-asset-item>
+    <a-asset-item id="lod" src="sail_lod.glb"></a-asset-item>
+    <a-asset-item id="ship1" src="ss_kyle_-_photogrammetry.glb"></a-asset-item>
+  </a-assets>
 
-        <a-asset-item id="lod" src="sail_lod.glb"></a-asset-item>
-        <a-asset-item id="ship1" src="ss_kyle_-_photogrammetry.glb"></a-asset-item>
+</a-scene>
 
-        <a-asset-item id="bojec" src="bojka.glb"></a-asset-item>
-        <a-asset-item id="zidka" src="zed.glb"></a-asset-item>
-      </a-assets>
-
-      <a-entity position="-20 -2 -50"> 
-        <a-entity 
-          gltf-model="#lod"
-          position="0 0 0"
-          scale="50 50 50"
-          visible="true">
-        </a-entity>
-      </a-entity> 
-
-      <a-entity position="-300 -620 -200"> 
-        <a-entity 
-          gltf-model="#ruins"
-          position="0 0 0"
-          scale="5 5 5"
-          visible="true">
-        </a-entity>
-      </a-entity> 
-
-     <a-entity position="-0 -630 -0"> 
-        <a-entity 
-          gltf-model="#ship1"
-          position="0 0 0"
-          scale="10 10 10"
-          visible="true">
-        </a-entity>
-      </a-entity> 
-
-    </a-scene>
-
-    <audio id="music" loop>
-      <source src="music.mp3" type="audio/mpeg">
-    </audio>
+<audio id="music" loop>
+  <source src="music.mp3" type="audio/mpeg">
+</audio>
 
 <!----------------------------------------->
 <!-- SKRIPT ------------------------------->
 
-    <script>
+<script>
 
-    ///////////////////////////////////////////////////////////////////
-    // PLAYER MOVEMENT
-    AFRAME.registerComponent("movement", {
+AFRAME.registerComponent("movement", {
 
-      // -----------------------------------
-      //// INIT !!! = spustí se jednou na začátku 
-      init: function () { 
-        this.keys = {}; // seznam zmáčknutých kláves
-        this.speed = 40; // rychlost pohybu
-        this.idleTime = 0; // idle animace 
-        this.lightEl = document.querySelector("#mainLight");
+  init: function () {
 
-        window.addEventListener("keydown", (e) => { // KDYŽ zmáčkneme klávesu
-          this.keys[e.code] = true;
-        });
+    this.keys = {};
+    this.speed = 40;
+    this.idleTime = 0;
 
-        window.addEventListener("keyup", (e) => {  // KDYŽ pustíme klávesu
-          this.keys[e.code] = false;
-        });
+    // joystick
+    this.stickX = 0;
+    this.stickY = 0;
 
-        this.stickX = 0;
-        this.stickY = 0;
-
-        this.el.sceneEl.addEventListener("axismove", (e) => {
-          this.stickX = e.detail.axis[0];
-          this.stickY = e.detail.axis[1];
-        });
-
-      },
-
-      // -----------------------------------
-      //// TICK = spouští se každý frame 
-      tick: function (t, dt) { // delta time v sekundách
-        const dt_s = dt / 1000; // tělo hráče
-        const rig = this.el.object3D; // kamera hráče
-
-        cas += (dt_s * 0.3);
-        animateWater();
-        animateFish();
-
-        const y = rig.position.y;
-        const sceneEl = document.querySelector("a-scene");
-
-        const kamera = this.el.querySelector("a-camera"); // výsledná rychlost
-        const rychlost = this.speed * dt_s; // směr kam se kamera dívá
-        const smer = new THREE.Vector3();
-
-        kamera.object3D.getWorldDirection(smer); // nechceme lítat nahoru a dolů
-        smer.y = 0;
-        smer.normalize(); // normalizace = délka vektoru bude 1
-
-        const right = new THREE.Vector3(); // pravý směr kamery
-        right.crossVectors( smer, new THREE.Vector3(0, 1, 0) ).normalize();
-
-        updateChunks( rig.position.x, rig.position.z);
-        document.querySelector("#sky").object3D.position.copy(rig.position); // sky sleduje hráče
-        cleanupChunks(rig.position.x, rig.position.z); // čistění vzdálených chunku
-
-        
-       if (y < 0) {
-          const depth = Math.min(Math.abs(y) / 500, 1);
-          sceneEl.setAttribute( "fog", `type: exponential; color: #001317; density: ${0.001 + depth * 0.01}`);
-        } else {
-          sceneEl.setAttribute( "fog", "type: exponential; color: #FFA629; density: 0.0007" );
-        }  
-
-        // -----------------------------------
-        // POHYB
-
-        if (this.keys["KeyW"]) {rig.position.addScaledVector(smer,-rychlost);}
-        if (this.keys["KeyS"]) { rig.position.addScaledVector(smer,rychlost);}
-        if (this.keys["KeyD"]) {rig.position.addScaledVector(right,-rychlost);}
-        if (this.keys["KeyA"]) {rig.position.addScaledVector(right,rychlost);}
-        if (this.keys["Space"]) {rig.position.y += rychlost;}
-        if (this.keys["ShiftLeft"]) {rig.position.y -= rychlost;}
-
-        rig.position.addScaledVector(smer, -this.stickY * rychlost);
-        rig.position.addScaledVector(right, -this.stickX * rychlost);
-
-        const moving =
-          this.keys["KeyW"] ||
-          this.keys["KeyS"] ||
-          this.keys["KeyA"] ||
-          this.keys["KeyD"] ||
-          this.keys["Space"] ||
-          this.keys["ShiftLeft"];
-
-        if (!moving) {
-          this.idleTime += dt_s;
-          // jemné houpání nahoru/dolů
-          kamera.object3D.position.y =
-            Math.sin(this.idleTime * 5) * 0.08;
-          // jemný náklon
-          kamera.object3D.rotation.z =
-            Math.sin(this.idleTime * 2) * 0.01;
-
-        } else {
-          this.idleTime = 0;
-          // reset
-          kamera.object3D.position.y = 0;
-          kamera.object3D.rotation.z = 0;
-        }
-
-      }
+    window.addEventListener("keydown", (e) => {
+      this.keys[e.code] = true;
     });
+
+    window.addEventListener("keyup", (e) => {
+      this.keys[e.code] = false;
+    });
+
+    // ✔ VR SAFE input (důležité)
+    const left = document.querySelector("#leftHand");
+    const right = document.querySelector("#rightHand");
+
+    const onStick = (e) => {
+      this.stickX = e.detail.x;
+      this.stickY = e.detail.y;
+    };
+
+    left.addEventListener("thumbstickmoved", onStick);
+    right.addEventListener("thumbstickmoved", onStick);
+  },
+
+  tick: function (t, dt) {
+
+    const dt_s = dt / 1000;
+    const rig = this.el.object3D;
+
+    const kamera = this.el.querySelector("#camera");
+
+    const speed = this.speed * dt_s;
+
+    const dir = new THREE.Vector3();
+    kamera.object3D.getWorldDirection(dir);
+    dir.y = 0;
+    dir.normalize();
+
+    const right = new THREE.Vector3();
+    right.crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+
+    // KEYBOARD
+    if (this.keys["KeyW"]) rig.position.addScaledVector(dir, -speed);
+    if (this.keys["KeyS"]) rig.position.addScaledVector(dir, speed);
+    if (this.keys["KeyA"]) rig.position.addScaledVector(right, speed);
+    if (this.keys["KeyD"]) rig.position.addScaledVector(right, -speed);
+
+    if (this.keys["Space"]) rig.position.y += speed;
+    if (this.keys["ShiftLeft"]) rig.position.y -= speed;
+
+    // VR joystick
+    rig.position.addScaledVector(dir, -this.stickY * speed);
+    rig.position.addScaledVector(right, -this.stickX * speed);
+
+  }
+});
 
     //////////////////////////////////////////////////////////////////
     // SIMPLEX NOISE
