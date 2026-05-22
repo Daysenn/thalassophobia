@@ -114,6 +114,15 @@ git push
         window.addEventListener("keyup", (e) => {  // KDYŽ pustíme klávesu
           this.keys[e.code] = false;
         });
+
+        this.stickX = 0;
+        this.stickY = 0;
+
+        this.el.addEventListener("thumbstickmoved", (e) => {
+          this.stickX = e.detail.x;
+          this.stickY = e.detail.y;
+        });
+
       },
 
       // -----------------------------------
@@ -157,6 +166,9 @@ git push
         if (this.keys["KeyA"]) {rig.position.addScaledVector(right,rychlost);}
         if (this.keys["Space"]) {rig.position.y += rychlost;}
         if (this.keys["ShiftLeft"]) {rig.position.y -= rychlost;}
+
+        rig.position.addScaledVector(smer, -this.stickY * rychlost);
+        rig.position.addScaledVector(right, -this.stickX * rychlost);
 
         const moving =
           this.keys["KeyW"] ||
